@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transformer 架构动画</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+:root{
+  --bg:#070b14;--card:rgba(12,20,38,0.82);--card-solid:#0c1426;
+  --border:rgba(34,211,167,0.18);--accent:#22d3a7;--accent-dim:rgba(34,211,167,0.12);
+  --orange:#f97316;--orange-dim:rgba(249,115,22,0.12);
+  --cyan:#38bdf8;--cyan-dim:rgba(56,189,248,0.1);
+  --red:#f43f5e;--text:#e8edf5;--muted:#7a8ba3;--dimmed:#3d4f66;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+#bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none}
+
+/* 页面容器 */
+.page{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;padding:18px 24px 12px}
+
+/* 标题 */
+header{text-align:center;padding-bottom:10px}
+header h1{font-size:2rem;font-weight:800;letter-spacing:-.03em;
+  background:linear-gradient(135deg,var(--accent),var(--cyan));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+header p{color:var(--muted);font-size:.82rem;margin-top:4px;letter-spacing:.02em}
+
+/* 架构包裹器 */
+.arch-wrapper{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;position:relative}
+
+/* 主流程行 */
+.main-flow{display:flex;align-items:center;gap:0;position:relative;padding:10px 0}
+
+/* IO块 */
+.io-block{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;
+  cursor:pointer;transition:all .3s;min-width:90px;text-align:center;backdrop-filter:blur(8px)}
+.io-block:hover{border-color:var(--accent);box-shadow:0 0 24px var(--accent-dim)}
+.io-block.highlight{border-color:var(--accent);box-shadow:0 0 32px rgba(34,211,167,0.25)}
+.io-label{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px;font-weight:500}
+.io-tokens{display:flex;flex-wrap:wrap;gap:3px;justify-content:center}
+.io-tokens .tk{display:inline-block;padding:2px 7px;border-radius:4px;font-family:'JetBrains Mono',monospace;
+  font-size:.72rem;background:rgba(34,211,167,0.06);color:var(--text);transition:all .4s;border:1px solid transparent}
+.io-tokens .tk.lit{background:var(--accent-dim);color:var(--accent);border-color:rgba(34,211,167,0.25);
+  box-shadow:0 0 10px var(--accent-dim)}
+.io-block.output-block .tk{background:rgba(249,115,22,0.06)}
+.io-block.output-block .tk.lit{background:var(--orange-dim);color:var(--orange);border-color:rgba(249,115,22,0.25)}
+
+/* 箭头连接器 */
+.arr{display:flex;align-items:center;padding:0 6px;position:relative;width:42px;justify-content:center}
+.arr::before{content:'';width:28px;height:2px;background:linear-gradient(90deg,rgba(34,211,167,0.35),rgba(34,211,167,0.1));position:relative}
+.arr::after{content:'';position:absolute;right:8px;width:0;height:0;
+  border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:6px solid rgba(34,211,167,0.35)}
+/* 数据流小圆点 */
+.arr .dot{position:absolute;width:5px;height:5px;background:var(--accent);border-radius:50%;
+  box-shadow:0 0 8px var(--accent);opacity:0;left:4px;top:50%;margin-top:-2.5px}
+.arr .dot.active{animation:dotFlow 1.2s ease-in-out infinite}
+@keyframes dotFlow{0%{opacity:0;left:4px}15%{opacity:1}85%{opacity:1}100%{opacity:0;left:32px}}
+
+/* 模块卡片 */
+.mod{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;
+  cursor:pointer;transition:all .3s;min-width:110px;text-align:center;backdrop-filter:blur(8px);position:relative}
+.mod:hover{border-color:var(--accent);box-shadow:0 0 24px var(--accent-dim);transform:translateY(-2px)}
+.mod.highlight{border-color:var(--accent);box-shadow:0 0 32px rgba(34,211,167,0.25)}
+.mod-label{font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:5px;font-weight:500}
+.mod-title{font-size:.88rem;font-weight:600}
+
+/* 编码器/解码器 */
+.ed{display:flex;flex-direction:column;gap:5px;padding:14px;min-width:200px;position:relative;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;backdrop-filter:blur(10px);
+  cursor:pointer;transition:all .3s}
+.ed:hover{transform:translateY(-2px)}
+.ed.enc:hover{border-color:var(--accent);box-shadow:0 0 30px var(--accent-dim)}
+.ed.dec:hover{border-color:var(--orange);box-shadow:0 0 30px var(--orange-dim)}
+.ed.enc.highlight{border-color:var(--accent);box-shadow:0 0 40px rgba(34,211,167,0.2)}
+.ed.dec.highlight{border-color:var(--orange);box-shadow:0 0 40px rgba(249,115,22,0.2)}
+.ed-head{font-size:.78rem;font-weight:700;text-align:center;padding:7px 10px;border-radius:7px;margin-bottom:4px}
+.ed.enc .ed-head{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(34,211,167,0.2)}
+.ed.dec .ed-head{background:var(--orange-dim);color:var(--orange);border:1px solid rgba(249,115,22,0.2)}
+.nx{position:absolute;top:-8px;right:-8px;font-family:'JetBrains Mono',monospace;font-size:.6rem;font-weight:700;
+  padding:2px 8px;border-radius:10px;z-index:2}
+.ed.enc .nx{background:var(--accent);color:var(--bg)}
+.ed.dec .nx{background:var(--orange);color:var(--bg)}
+.sm{background:rgba(6,10,20,0.5);border:1px solid rgba(255,255,255,0.05);border-radius:7px;
+  padding:8px 10px;text-align:center;font-size:.73rem;font-weight:500;transition:all .3s;cursor:pointer}
+.sm:hover{border-color:var(--accent);background:rgba(34,211,167,0.04)}
+.sm.highlight{border-color:var(--accent);background:var(--accent-dim)}
+.ed.dec .sm:hover{border-color:var(--orange);background:rgba(249,115,22,0.04)}
+.ed.dec .sm.highlight{border-color:var(--orange);background:var(--orange-dim)}
+.sm.cross{border-color:rgba(56,189,248,0.2)}
+.sm.cross:hover{border-color:var(--cyan);background:var(--cyan-dim)}
+.sm.cross.highlight{border-color:var(--cyan);background:rgba(56,189,248,0.15)}
+.sm-icon{font-size:.85rem;margin-bottom:2px;color:var(--muted);transition:color .3s}
+.sm:hover .sm-icon{color:var(--accent)}
+.ed.dec .sm:hover .sm-icon{color:var(--orange)}
+.sm.cross:hover .sm-icon{color:var(--cyan)}
+.sm.norm{font-size:.65rem;padding:5px 10px;color:var(--dimmed);border-style:dashed}
+.sm.norm:hover{color:var(--muted)}
+
+/* 解码器输入路径 */
+.dec-input-path{display:flex;align-items:center;gap:0;position:relative;margin-top:8px;
+  /* 对齐到解码器下方 - 用JS动态设置margin-left */}
+.dec-input-path .arr::before{background:linear-gradient(90deg,rgba(249,115,22,0.35),rgba(249,115,22,0.1))}
+.dec-input-path .arr::after{border-left-color:rgba(249,115,22,0.35)}
+.dec-input-path .arr .dot{background:var(--orange);box-shadow:0 0 8px var(--orange)}
+.dec-input-path .io-block{border-color:rgba(249,115,22,0.15)}
+.dec-input-path .io-block:hover{border-color:var(--orange);box-shadow:0 0 24px var(--orange-dim)}
+.dec-input-path .io-block.highlight{border-color:var(--orange);box-shadow:0 0 32px rgba(249,115,22,0.25)}
+.dec-input-path .io-block .tk{background:rgba(249,115,22,0.06)}
+.dec-input-path .io-block .tk.lit{background:var(--orange-dim);color:var(--orange);border-color:rgba(249,115,22,0.25)}
+.dec-input-path .mod{border-color:rgba(249,115,22,0.15)}
+.dec-input-path .mod:hover{border-color:var(--orange);box-shadow:0 0 24px var(--orange-dim)}
+.dec-input-path .mod.highlight{border-color:var(--orange);box-shadow:0 0 32px rgba(249,115,22,0.25)}
+/* 上箭头 */
+.arr-up{display:flex;justify-content:center;width:42px;position:relative}
+.arr-up::before{content:'';width:2px;height:24px;background:linear-gradient(180deg,rgba(249,115,22,0.35),rgba(249,115,22,0.1))}
+.arr-up::after{content:'';position:absolute;top:0;left:50%;margin-left:-5px;
+  border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:6px solid rgba(249,115,22,0.35)}
+.arr-up .dot{position:absolute;width:5px;height:5px;background:var(--orange);border-radius:50%;
+  box-shadow:0 0 8px var(--orange);opacity:0;top:20px;left:50%;margin-left:-2.5px}
+.arr-up .dot.active{animation:dotFlowUp 1.2s ease-in-out infinite}
+@keyframes dotFlowUp{0%{opacity:0;top:20px}15%{opacity:1}85%{opacity:1}100%{opacity:0;top:-4px}}
+
+/* SVG覆盖层 - 交叉注意力连线 */
+.svg-overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
+.cross-path{stroke:var(--cyan);stroke-width:1.5;fill:none;stroke-dasharray:6 4;opacity:.4}
+.cross-path.active{stroke-dasharray:none;opacity:.8;animation:crossPulse 1s ease-in-out infinite alternate}
+@keyframes crossPulse{0%{opacity:.5;stroke-width:1.5}100%{opacity:1;stroke-width:2.5}}
+.cross-dot{fill:var(--cyan);opacity:0}
+.cross-dot.active{opacity:1}
+
+/* 控制栏 */
+.controls{display:flex;justify-content:center;align-items:center;gap:14px;padding:14px 0 4px;flex-wrap:wrap}
+.btn{padding:9px 22px;border-radius:8px;border:1px solid var(--border);background:var(--accent-dim);
+  color:var(--accent);font-family:'Space Grotesk',sans-serif;font-size:.82rem;font-weight:600;
+  cursor:pointer;transition:all .3s;display:flex;align-items:center;gap:8px}
+.btn:hover{background:rgba(34,211,167,0.18);border-color:var(--accent);box-shadow:0 0 20px var(--accent-dim)}
+.btn:active{transform:scale(.97)}
+.btn.running{pointer-events:none;opacity:.5}
+.btn.orange{background:var(--orange-dim);color:var(--orange);border-color:rgba(249,115,22,0.18)}
+.btn.orange:hover{background:rgba(249,115,22,0.18);border-color:var(--orange);box-shadow:0 0 20px var(--orange-dim)}
+.step-text{font-size:.78rem;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.step-text span{color:var(--accent)}
+
+/* 详情面板 */
+.detail-panel{position:fixed;bottom:0;left:0;right:0;background:rgba(7,11,20,0.96);
+  border-top:1px solid var(--border);backdrop-filter:blur(24px);padding:16px 28px;
+  transform:translateY(100%);transition:transform .4s cubic-bezier(.16,1,.3,1);z-index:100;max-height:40vh;overflow-y:auto}
+.detail-panel.show{transform:translateY(0)}
+.dp-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.dp-title{font-size:1rem;font-weight:700;color:var(--accent)}
+.dp-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:4px;transition:color .2s}
+.dp-close:hover{color:var(--text)}
+.dp-desc{font-size:.84rem;color:var(--muted);line-height:1.7;max-width:800px}
+.dp-formula{font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--cyan);
+  background:var(--cyan-dim);padding:10px 16px;border-radius:7px;margin-top:10px;
+  border:1px solid rgba(56,189,248,0.15);white-space:pre-line;line-height:1.6}
+
+/* 自注意力弹窗 */
+.attn-modal{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;
+  background:rgba(4,6,12,0.85);backdrop-filter:blur(8px)}
+.attn-modal.show{display:flex}
+.attn-box{background:var(--card-solid);border:1px solid var(--border);border-radius:16px;padding:28px;
+  min-width:420px;max-width:520px;box-shadow:0 0 80px rgba(34,211,167,0.1);animation:modalIn .35s ease}
+@keyframes modalIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+.attn-box h3{font-size:1rem;font-weight:700;color:var(--accent);margin-bottom:4px}
+.attn-box .sub{font-size:.75rem;color:var(--muted);margin-bottom:16px}
+.attn-box .close{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem}
+.attn-box .close:hover{color:var(--text)}
+.attn-matrix{display:grid;gap:3px;margin:0 auto;width:fit-content}
+.attn-cell{width:44px;height:44px;border-radius:5px;display:flex;align-items:center;justify-content:center;
+  font-size:.6rem;font-family:'JetBrains Mono',monospace;color:rgba(255,255,255,0.8);transition:all .5s;position:relative}
+.attn-cell:hover{transform:scale(1.15);z-index:2;box-shadow:0 0 12px rgba(34,211,167,0.3)}
+.attn-labels{display:flex;gap:3px;margin-bottom:6px;padding-left:56px}
+.attn-labels span{width:44px;text-align:center;font-size:.65rem;font-family:'JetBrains Mono',monospace;color:var(--muted)}
+.attn-row-labels{display:flex;flex-direction:column;gap:3px;position:absolute;left:0;top:26px}
+.attn-row-labels span{width:50px;height:44px;display:flex;align-items:center;justify-content:flex-end;
+  padding-right:6px;font-size:.65rem;font-family:'JetBrains Mono',monospace;color:var(--muted)}
+.attn-matrix-wrap{position:relative;padding-left:56px}
+.attn-legend{display:flex;align-items:center;gap:8px;margin-top:14px;justify-content:center}
+.attn-legend .bar{width:120px;height:8px;border-radius:4px;
+  background:linear-gradient(90deg,rgba(34,211,167,0.05),rgba(34,211,167,0.9))}
+.attn-legend span{font-size:.65rem;color:var(--muted)}
+.attn-qkv{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:16px}
+.qkv-box{background:rgba(6,10,20,0.6);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px;text-align:center}
+.qkv-box .qkv-title{font-size:.7rem;font-weight:700;margin-bottom:4px}
+.qkv-box.q .qkv-title{color:var(--accent)}
+.qkv-box.k .qkv-title{color:var(--cyan)}
+.qkv-box.v .qkv-title{color:var(--orange)}
+.qkv-box .qkv-vals{font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--dimmed);line-height:1.6}
+
+/* 响应式 */
+@media(max-width:1100px){.main-flow{flex-wrap:wrap;justify-content:center;gap:8px}.arr{width:24px}.ed{min-width:170px}}
+@media(max-width:700px){
+  header h1{font-size:1.4rem}
+  .main-flow{flex-direction:column;gap:6px}
+  .arr{width:24px;height:20px}
+  .arr::before{width:2px;height:16px;background:linear-gradient(180deg,rgba(34,211,167,0.35),rgba(34,211,167,0.1))}
+  .arr::after{top:2px;right:auto;left:50%;margin-left:-4px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid rgba(34,211,167,0.35);border-bottom:none}
+  .ed{min-width:260px}
+  .attn-box{min-width:320px;padding:20px}
+  .attn-cell{width:36px;height:36px;font-size:.5rem}
+  .attn-labels span,.attn-row-labels span{font-size:.55rem}
+  .attn-labels{padding-left:46px}.attn-row-labels span{width:42px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<div class="page">
+  <header>
+    <h1>Transformer Architecture</h1>
+    <p>点击任意模块查看详细说明 &middot; 点击「前向传播」观看数据流动动画</p>
+  </header>
+
+  <div class="arch-wrapper" id="archWrapper">
+    <!-- SVG连线层 -->
+    <svg class="svg-overlay" id="svgOverlay"></svg>
+
+    <!-- 主流程 -->
+    <div class="main-flow" id="mainFlow">
+      <!-- 输入 -->
+      <div class="io-block" data-key="input" id="mod-input">
+        <div class="io-label">输入序列</div>
+        <div class="io-tokens" id="inputTokens">
+          <span class="tk">我</span><span class="tk">喜</span><span class="tk">欢</span><span class="tk">编</span><span class="tk">程</span>
+        </div>
+      </div>
+      <div class="arr" id="arr0"><span class="dot" id="dot0"></span></div>
+
+      <!-- 嵌入+位置编码 -->
+      <div class="mod" data-key="embedding" id="mod-embedding">
+        <div class="mod-label">Input Embedding</div>
+        <div class="mod-title">词嵌入 + 位置编码</div>
+      </div>
+      <div class="arr" id="arr1"><span class="dot" id="dot1"></span></div>
+
+      <!-- 编码器 -->
+      <div class="ed enc" data-key="encoder" id="mod-encoder">
+        <span class="nx">&times;6</span>
+        <div class="ed-head">编码器 Encoder</div>
+        <div class="sm" data-key="self-attention" id="sm-sa">
+          <div class="sm-icon"><i class="fas fa-project-diagram"></i></div>多头自注意力
+        </div>
+        <div class="sm norm" data-key="add-norm"><i class="fas fa-plus-circle"></i> Add &amp; Layer Norm</div>
+        <div class="sm" data-key="ffn-enc" id="sm-ffn-e">
+          <div class="sm-icon"><i class="fas fa-network-wired"></i></div>前馈网络 (FFN)
+        </div>
+        <div class="sm norm" data-key="add-norm"><i class="fas fa-plus-circle"></i> Add &amp; Layer Norm</div>
+      </div>
+      <div class="arr" id="arr2"><span class="dot" id="dot2"></span></div>
+
+      <!-- 解码器 -->
+      <div class="ed dec" data-key="decoder" id="mod-decoder">
+        <span class="nx">&times;6</span>
+        <div class="ed-head">解码器 Decoder</div>
+        <div class="sm" data-key="masked-sa" id="sm-msa">
+          <div class="sm-icon"><i class="fas fa-mask"></i></div>掩码自注意力
+        </div>
+        <div class="sm norm" data-key="add-norm"><i class="fas fa-plus-circle"></i> Add &amp; Layer Norm</div>
+        <div class="sm cross" data-key="cross-attention" id="sm-ca">
+          <div class="sm-icon"><i class="fas fa-exchange-alt"></i></div>交叉注意力
+        </div>
+        <div class="sm norm" data-key="add-norm"><i class="fas fa-plus-circle"></i> Add &amp; Layer Norm</div>
+        <div class="sm" data-key="ffn-dec" id="sm-ffn-d">
+          <div class="sm-icon"><i class="fas fa-network-wired"></i></div>前馈网络 (FFN)
+        </div>
+        <div class="sm norm" data-key="add-norm"><i class="fas fa-plus-circle"></i> Add &amp; Layer Norm</div>
+      </div>
+      <div class="arr" id="arr3"><span class="dot" id="dot3"></span></div>
+
+      <!-- 线性+Softmax -->
+      <div class="mod" data-key="linear-softmax" id="mod-linear">
+        <div class="mod-label">Output Projection</div>
+        <div class="mod-title">线性层 + Softmax</div>
+      </div>
+      <div class="arr" id="arr4"><span class="dot" id="dot4"></span></div>
+
+      <!-- 输出 -->
+      <div class="io-block output-block" data-key="output" id="mod-output">
+        <div class="io-label">输出概率</div>
+        <div class="io-tokens" id="outputTokens">
+          <span class="tk">I</span><span class="tk">love</span><span class="tk">coding</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 解码器输入路径 -->
+    <div class="dec-input-path" id="decInputPath">
+      <div class="io-block" data-key="dec-input" id="mod-dec-input">
+        <div class="io-label">输出序列 (右移)</div>
+        <div class="io-tokens" id="decInputTokens">
+          <span class="tk">&lt;s&gt;</span><span class="tk">I</span><span class="tk">love</span>
+        </div>
+      </div>
+      <div class="arr" id="arr5"><span class="dot" id="dot5"></span></div>
+      <div class="mod" data-key="dec-embedding" id="mod-dec-embed">
+        <div class="mod-label">Output Embedding</div>
+        <div class="mod-title">嵌入 + 位置编码</div>
+      </div>
+      <div class="arr-up" id="arr6"><span class="dot" id="dot6"></span></div>
+    </div>
+  </div>
+
+  <!-- 控制栏 -->
+  <div class="controls">
+    <button class="btn" id="btnForward"><i class="fas fa-play"></i> 前向传播</button>
+    <button class="btn orange" id="btnAttn"><i class="fas fa-th"></i> 自注意力可视化</button>
+    <div class="step-text" id="stepText">就绪</div>
+  </div>
+</div>
+
+<!-- 详情面板 -->
+<div class="detail-panel" id="detailPanel">
+  <div class="dp-head">
+    <div class="dp-title" id="dpTitle"></div>
+    <button class="dp-close" id="dpClose" aria-label="关闭详情"><i class="fas fa-times"></i></button>
+  </div>
+  <div class="dp-desc" id="dpDesc"></div>
+  <div class="dp-formula" id="dpFormula"></div>
+</div>
+
+<!-- 自注意力弹窗 -->
+<div class="attn-modal" id="attnModal">
+  <div class="attn-box" style="position:relative">
+    <button class="close" id="attnClose" aria-label="关闭"><i class="fas fa-times"></i></button>
+    <h3>多头自注意力机制</h3>
+    <div class="sub">Query &times; Key 转置 → Softmax → &times; Value，每个位置学习关注序列中哪些位置</div>
+    <div class="attn-matrix-wrap">
+      <div class="attn-row-labels" id="attnRowLabels"></div>
+      <div class="attn-labels" id="attnColLabels"></div>
+      <div class="attn-matrix" id="attnMatrix"></div>
+    </div>
+    <div class="attn-legend">
+      <span>0.0</span><div class="bar"></div><span>1.0</span>
+    </div>
+    <div class="attn-qkv" id="attnQKV"></div>
+  </div>
+</div>
+
+<script>
+/* ===== 模块信息数据 ===== */
+const INFO = {
+  input: {
+    title: '输入序列',
+    desc: '将原始文本分割为一系列token（词或子词单元）。每个token会被映射为一个整数ID，作为模型处理的起点。现代Transformer通常使用BPE（字节对编码）进行分词。',
+    formula: '"我喜欢编程" → Tokenize → [我, 喜欢, 编, 程]'
+  },
+  embedding: {
+    title: '词嵌入 + 位置编码',
+    desc: '词嵌入将每个token ID映射为d_model维的连续向量（如512维），捕捉语义信息。位置编码使用不同频率的正弦/余弦函数生成，为模型注入序列顺序信息——因为自注意力本身是位置无关的。',
+    formula: 'PE(pos, 2i)   = sin(pos / 10000^(2i/d_model))\nPE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))\n\n最终输入 = 词嵌入 + 位置编码'
+  },
+  encoder: {
+    title: '编码器 ×N',
+    desc: '由N个（原论文中N=6）相同的层堆叠而成。每层包含两个子层：多头自注意力和前馈神经网络。每个子层都使用残差连接和层归一化，有效缓解深层网络的梯度消失问题。',
+    formula: '每层结构：\nx → MultiHeadAttention → Add & Norm → FFN → Add & Norm → 输出\n\n共堆叠 6 层（可配置）'
+  },
+  'self-attention': {
+    title: '多头自注意力',
+    desc: '核心创新组件。通过学习到的三个线性变换矩阵将输入分别投影为Query(Q)、Key(K)、Value(V)，计算Q与所有K的点积得到注意力分数，经Softmax归一化后加权求和V。多头机制将注意力空间分为h个头并行计算，让模型同时关注不同表示子空间中的不同位置。',
+    formula: 'Attention(Q, K, V) = softmax(QKᵀ / √d_k) · V\n\nMultiHead = Concat(head₁, ..., headₕ) · Wᴼ\nheadᵢ = Attention(QWᵢᵠ, KWᵢᵏ, VWᵢᵛ)'
+  },
+  'add-norm': {
+    title: '残差连接 & 层归一化',
+    desc: '残差连接将子层的输入直接加到输出上：output = x + SubLayer(x)。这创建了梯度高速公路，使信息可以绕过某些层直接传播。层归一化对每个样本的特征维度做归一化，稳定训练过程。',
+    formula: 'Output = LayerNorm(x + SubLayer(x))\n\nLayerNorm: 对 d_model 维度做均值方差归一化'
+  },
+  'ffn-enc': {
+    title: '前馈网络',
+    desc: '对每个位置独立地应用两层全连接变换，中间使用ReLU（或GELU）激活函数。第一层通常将维度从d_model扩展到d_ff（4倍），第二层再压缩回来。这为模型提供了非线性表达能力。',
+    formula: 'FFN(x) = max(0, xW₁ + b₁)W₂ + b₂\n\n其中 W₁ ∈ R^(d_model × d_ff)\n      W₂ ∈ R^(d_ff × d_model)\n      d_ff 通常 = 4 × d_model'
+  },
+  decoder: {
+    title: '解码器 ×N',
+    desc: '同样由N个相同层堆叠，但每层包含三个子层：掩码自注意力、交叉注意力和前馈网络。掩码自注意力确保自回归特性（不能看到未来token），交叉注意力让解码器关注编码器的输出。每个子层同样使用残差连接和层归一化。',
+    formula: '每层结构：\nx → MaskedSelfAttn → Add&Norm\n  → CrossAttention → Add&Norm\n  → FFN → Add&Norm → 输出'
+  },
+  'masked-sa': {
+    title: '掩码多头自注意力',
+    desc: '与标准多头自注意力相同的计算方式，但额外引入一个上三角掩码，将未来位置的注意力分数设为负无穷（Softmax后趋近于0）。这确保在生成第i个token时，只能关注位置≤i的已生成内容，实现自回归生成。',
+    formula: 'Mask(QKᵀ / √d_k) = 将上三角设为 -∞\n\nMaskedAttn(Q,K,V) = softmax(Mask(QKᵀ)/√d_k) · V'
+  },
+  'cross-attention': {
+    title: '交叉注意力',
+    desc: 'Query来自解码器上一子层的输出，Key和Value来自编码器最后一层的输出。这使得解码器的每个位置都能动态地关注输入序列中的不同部分，建立源语言和目标语言之间的对齐关系。',
+    formula: 'Q = 解码器输出 · Wᵠ\nK = 编码器输出 · Wᵏ\nV = 编码器输出 · Wᵛ\n\nCrossAttn = softmax(QKᵀ / √d_k) · V'
+  },
+  'ffn-dec': {
+    title: '前馈网络',
+    desc: '结构与编码器中的前馈网络完全相同：两层线性变换 + 激活函数。对每个位置独立处理，提供非线性变换能力。',
+    formula: 'FFN(x) = max(0, xW₁ + b₁)W₂ + b₂'
+  },
+  'dec-input': {
+    title: '输出序列 (右移)',
+    desc: '解码器的训练输入是目标序列右移一位后的结果。在起始位置插入特殊的开始标记<s>，每个位置的输入是前一步的真实输出（教师强制）。在推理时则使用模型自身上一步的预测结果。',
+    formula: '目标: [I, love, coding, </s>]\n右移: [<s>, I, love, coding]\n\n训练时用真实标签，推理时用模型预测'
+  },
+  'dec-embedding': {
+    title: '输出嵌入 + 位置编码',
+    desc: '与编码器侧使用相同的词嵌入矩阵（权重共享），加上相同的位置编码方案。权重共享减少了参数量，并使嵌入空间在源语言和目标语言之间保持一致。',
+    formula: '使用与编码器共享的嵌入矩阵\n最终输入 = 词嵌入 + 位置编码'
+  },
+  'linear-softmax': {
+    title: '线性层 + Softmax',
+    desc: '线性层将解码器的d_model维输出映射到词表大小|V|的维度。Softmax将其转换为概率分布，表示词表中每个词作为下一个token的似然度。',
+    formula: 'logits = x · W (W ∈ R^(d_model × |V|))\nP(wᵢ) = softmax(logits)ᵢ = e^(logitsᵢ) / Σⱼ e^(logitsⱼ)'
+  },
+  output: {
+    title: '输出概率',
+    desc: '每个时间步输出一个完整的词表概率分布。训练时计算与真实标签的交叉熵损失；推理时取概率最高的词（贪心解码）或使用束搜索获得更优序列。整个过程自回归地进行——每生成一个token就将其反馈给解码器继续生成下一个。',
+    formula: '训练: Loss = -Σ log P(w*_t | w_<t)\n推理: w_t = argmax P(w | w_<t)  (贪心)\n     或 Beam Search (束搜索)'
+  }
+};
+
+/* ===== 背景粒子 ===== */
+const bgCanvas = document.getElementById('bgCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+let particles = [];
+const PARTICLE_COUNT = 80;
+
+function resizeBg() {
+  bgCanvas.width = window.innerWidth;
+  bgCanvas.height = window.innerHeight;
+}
+resizeBg();
+window.addEventListener('resize', resizeBg);
+
+class Particle {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = Math.random() * bgCanvas.width;
+    this.y = Math.random() * bgCanvas.height;
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = (Math.random() - 0.5) * 0.3;
+    this.r = Math.random() * 1.5 + 0.5;
+    this.alpha = Math.random() * 0.3 + 0.05;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    if (this.x < 0 || this.x > bgCanvas.width) this.vx *= -1;
+    if (this.y < 0 || this.y > bgCanvas.height) this.vy *= -1;
+  }
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(34,211,167,${this.alpha})`;
+    ctx.fill();
+  }
+}
+
+for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new Particle());
+
+function drawBg() {
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+  /* 绘制连线 */
+  for (let i = 0; i < particles.length; i++) {
+    particles[i].update();
+    particles[i].draw(bgCtx);
+    for (let j = i + 1; j < particles.length; j++) {
+      const dx = particles[i].x - particles[j].x;
+      const dy = particles[i].y - particles[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 140) {
+        bgCtx.beginPath();
+        bgCtx.moveTo(particles[i].x, particles[i].y);
+        bgCtx.lineTo(particles[j].x, particles[j].y);
+        bgCtx.strokeStyle = `rgba(34,211,167,${0.04 * (1 - dist / 140)})`;
+        bgCtx.lineWidth = 0.5;
+        bgCtx.stroke();
+      }
+    }
+  }
+  requestAnimationFrame(drawBg);
+}
+drawBg();
+
+/* ===== SVG交叉注意力连线 ===== */
+const svgOverlay = document.getElementById('svgOverlay');
+const archWrapper = document.getElementById('archWrapper');
+
+function drawCrossLine() {
+  const encEl = document.getElementById('mod-encoder');
+  const caEl = document.getElementById('sm-ca');
+  if (!encEl || !caEl) return;
+  const wr = archWrapper.getBoundingClientRect();
+  const er = encEl.getBoundingClientRect();
+  const cr = caEl.getBoundingClientRect();
+  const x1 = er.right - wr.left;
+  const y1 = er.top + er.height * 0.3 - wr.top;
+  const x2 = cr.left - wr.left;
+  const y2 = cr.top + cr.height / 2 - wr.top;
+  const mx = (x1 + x2) / 2;
+  const path = `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+  svgOverlay.innerHTML = `
+    <path class="cross-path" id="crossPath" d="${path}"/>
+    <circle class="cross-dot" id="crossDot" r="4"/>
+  `;
+  /* 为交叉连线上的点设置运动路径 */
+  const crossDot = document.getElementById('crossDot');
+  if (crossDot && crossDot.style) {
+    try {
+      crossDot.style.offsetPath = `path("${path}")`;
+      crossDot.style.offsetDistance = '0%';
+    } catch(e) {}
+  }
+}
+drawCrossLine();
+window.addEventListener('resize', () => { drawCrossLine(); alignDecInput(); });
+
+/* ===== 对齐解码器输入路径 ===== */
+function alignDecInput() {
+  const decEl = document.getElementById('mod-decoder');
+  const dip = document.getElementById('decInputPath');
+  if (!decEl || !dip) return;
+  const wr = archWrapper.getBoundingClientRect();
+  const dr = decEl.getBoundingClientRect();
+  const decCenter = dr.left + dr.width / 2 - wr.left;
+  const dipW = dip.offsetWidth;
+  dip.style.marginLeft = (decCenter - dipW / 2) + 'px';
+}
+alignDecInput();
+setTimeout(alignDecInput, 100);
+
+/* ===== 详情面板 ===== */
+const detailPanel = document.getElementById('detailPanel');
+const dpTitle = document.getElementById('dpTitle');
+const dpDesc = document.getElementById('dpDesc');
+const dpFormula = document.getElementById('dpFormula');
+let currentKey = null;
+
+document.querySelectorAll('[data-key]').forEach(el => {
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const key = el.dataset.key;
+    if (!INFO[key]) return;
+    showDetail(key);
+  });
+});
+
+function showDetail(key) {
+  const info = INFO[key];
+  if (!info) return;
+  currentKey = key;
+  dpTitle.textContent = info.title;
+  dpDesc.textContent = info.desc;
+  if (info.formula) {
+    dpFormula.textContent = info.formula;
+    dpFormula.style.display = 'block';
+  } else {
+    dpFormula.style.display = 'none';
+  }
+  detailPanel.classList.add('show');
+}
+
+document.getElementById('dpClose').addEventListener('click', () => {
+  detailPanel.classList.remove('show');
+  currentKey = null;
+});
+
+/* ===== 前向传播动画 ===== */
+const forwardSteps = [
+  { ids: ['mod-input'], tokens: 'inputTokens', msg: 'Step 1/8: 输入文本分词' },
+  { ids: ['mod-embedding'], dots: ['dot0'], msg: 'Step 2/8: 词嵌入 + 位置编码' },
+  { ids: ['mod-encoder','sm-sa'], dots: ['dot1'], msg: 'Step 3/8: 编码器 — 多头自注意力' },
+  { ids: ['mod-encoder','sm-ffn-e'], msg: 'Step 4/8: 编码器 — 前馈网络' },
+  { ids: ['mod-dec-input'], tokens: 'decInputTokens', msg: 'Step 5/8: 解码器输入（右移目标序列）' },
+  { ids: ['mod-dec-embed'], dots: ['dot5','dot6'], msg: 'Step 6/8: 解码器嵌入 + 位置编码' },
+  { ids: ['mod-decoder','sm-msa'], dots: [], cross: true, msg: 'Step 7/8: 解码器 — 掩码自注意力' },
+  { ids: ['mod-decoder','sm-ca'], dots: ['dot2'], cross: true, msg: 'Step 7/8: 解码器 — 交叉注意力' },
+  { ids: ['mod-decoder','sm-ffn-d'], dots: [], msg: 'Step 8/8: 解码器 — 前馈网络' },
+  { ids: ['mod-linear'], dots: ['dot3'], msg: 'Step 8/8: 线性投影 + Softmax' },
+  { ids: ['mod-output'], tokens: 'outputTokens', dots: ['dot4'], msg: '完成: 输出概率分布' },
+];
+
+let isRunning = false;
+const btnForward = document.getElementById('btnForward');
+const stepText = document.getElementById('stepText');
+
+btnForward.addEventListener('click', async () => {
+  if (isRunning) return;
+  isRunning = true;
+  btnForward.classList.add('running');
+  clearHighlights();
+
+  for (let i = 0; i < forwardSteps.length; i++) {
+    const step = forwardSteps[i];
+    clearHighlights();
+    stepText.innerHTML = `<span>${step.msg}</span>`;
+
+    /* 高亮模块 */
+    step.ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('highlight');
+    });
+
+    /* 高亮token */
+    if (step.tokens) {
+      const cont = document.getElementById(step.tokens);
+      if (cont) cont.querySelectorAll('.tk').forEach(t => t.classList.add('lit'));
+    }
+
+    /* 激活流动圆点 */
+    if (step.dots) {
+      step.dots.forEach(did => {
+        const d = document.getElementById(did);
+        if (d) d.classList.add('active');
+      });
+    }
+
+    /* 交叉注意力连线 */
+    if (step.cross) {
+      const cp = document.getElementById('crossPath');
+      if (cp) cp.classList.add('active');
+    }
+
+    await sleep(900);
+  }
+
+  /* 最终全部亮起 */
+  clearHighlights();
+  document.querySelectorAll('[data-key]').forEach(el => el.classList.add('highlight'));
+  document.querySelectorAll('.tk').forEach(t => t.classList.add('lit'));
+  for (let d = 0; d <= 6; d++) {
+    const dot = document.getElementById('dot' + d);
+    if (dot) dot.classList.add('active');
+  }
+  const cp = document.getElementById('crossPath');
+  if (cp) cp.classList.add('active');
+  stepText.innerHTML = '<span>前向传播完成</span>';
+
+  await sleep(2000);
+  clearHighlights();
+  stepText.textContent = '就绪';
+  isRunning = false;
+  btnForward.classList.remove('running');
+});
+
+function clearHighlights() {
+  document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
+  document.querySelectorAll('.tk.lit').forEach(el => el.classList.remove('lit'));
+  document.querySelectorAll('.dot.active').forEach(el => el.classList.remove('active'));
+  const cp = document.getElementById('crossPath');
+  if (cp) cp.classList.remove('active');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* ===== 自注意力可视化 ===== */
+const attnModal = document.getElementById('attnModal');
+const btnAttn = document.getElementById('btnAttn');
+const attnClose = document.getElementById('attnClose');
+
+const tokens = ['我', '喜', '欢', '编', '程'];
+/* 预设注意力权重矩阵（模拟"喜欢"关联"我"，"编程"关联"程"等） */
+const attnWeights = [
+  [0.55, 0.20, 0.15, 0.05, 0.05],
+  [0.30, 0.10, 0.50, 0.05, 0.05],
+  [0.15, 0.45, 0.15, 0.15, 0.10],
+  [0.05, 0.05, 0.10, 0.20, 0.60],
+  [0.05, 0.05, 0.10, 0.55, 0.25],
+];
+/* QKV示例值 */
+const qkvData = {
+  Q: [['0.32','0.71','-0.15','0.48','0.22'],
+      ['-0.41','0.18','0.63','-0.27','0.35'],
+      ['0.15','-0.52','0.44','0.31','-0.18'],
+      ['0.28','0.09','-0.33','0.56','0.41'],
+      ['-0.19','0.47','0.21','-0.14','0.68']],
+  K: [['0.45','-0.22','0.38','0.11','-0.31'],
+      ['0.17','0.53','-0.41','0.29','0.08'],
+      ['-0.33','0.26','0.49','-0.18','0.42'],
+      ['0.51','-0.14','0.07','0.63','-0.28'],
+      ['-0.22','0.38','0.15','0.44','0.31']],
+  V: [['0.21','-0.38','0.55','0.12','0.44'],
+      ['-0.15','0.62','-0.27','0.48','0.19'],
+      ['0.38','-0.11','0.33','-0.42','0.56'],
+      ['0.44','0.25','-0.18','0.51','-0.33'],
+      ['-0.28','0.41','0.19','0.36','0.52']]
+};
+
+btnAttn.addEventListener('click', () => {
+  buildAttnViz();
+  attnModal.classList.add('show');
+});
+attnClose.addEventListener('click', () => attnModal.classList.remove('show'));
+attnModal.addEventListener('click', (e) => {
+  if (e.target === attnModal) attnModal.classList.remove('show');
+});
+
+function buildAttnViz() {
+  const n = tokens.length;
+  /* 列标签 */
+  const colLabels = document.getElementById('attnColLabels');
+  colLabels.innerHTML = tokens.map(t => `<span>${t}</span>`).join('');
+  /* 行标签 */
+  const rowLabels = document.getElementById('attnRowLabels');
+  rowLabels.innerHTML = tokens.map(t => `<span>${t}</span>`).join('');
+  /* 矩阵 */
+  const matrix = document.getElementById('attnMatrix');
+  matrix.style.gridTemplateColumns = `repeat(${n}, 44px)`;
+  matrix.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const v = attnWeights[i][j];
+      const cell = document.createElement('div');
+      cell.className = 'attn-cell';
+      cell.textContent = v.toFixed(2);
+      cell.style.background = `rgba(34,211,167,${Math.max(0.04, v * 0.9)})`;
+      cell.style.color = v > 0.35 ? '#fff' : 'rgba(255,255,255,0.6)';
+      cell.title = `"${tokens[i]}" 对 "${tokens[j]}" 的注意力权重: ${v.toFixed(2)}`;
+      /* 入场动画延迟 */
+      cell.style.opacity = '0';
+      cell.style.transform = 'scale(0.7)';
+      setTimeout(() => {
+        cell.style.opacity = '1';
+        cell.style.transform = 'scale(1)';
+      }, (i * n + j) * 40 + 100);
+      matrix.appendChild(cell);
+    }
+  }
+  /* QKV展示 */
+  const qkvContainer = document.getElementById('attnQKV');
+  qkvContainer.innerHTML = '';
+  ['Q','K','V'].forEach((name, idx) => {
+    const box = document.createElement('div');
+    box.className = `qkv-box ${name === 'Q' ? 'q' : name === 'K' ? 'k' : 'v'}`;
+    box.innerHTML = `<div class="qkv-title">${name === 'Q' ? 'Query' : name === 'K' ? 'Key' : 'Value'}</div>
+      <div class="qkv-vals">${qkvData[name].map(row => row.join('  ')).join('\n')}</div>`;
+    qkvContainer.appendChild(box);
+  });
+}
+
+/* ===== 键盘关闭 ===== */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    detailPanel.classList.remove('show');
+    attnModal.classList.remove('show');
+  }
+});
+
+/* ===== 初始入场动画 ===== */
+window.addEventListener('load', () => {
+  const allMods = document.querySelectorAll('[data-key]');
+  allMods.forEach((el, i) => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(16px)';
+    el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+    setTimeout(() => {
+      el.style.opacity = '1';
+      el.style.transform = 'translateY(0)';
+    }, i * 60 + 200);
+  });
+  /* 箭头也做入场 */
+  document.querySelectorAll('.arr, .arr-up').forEach((el, i) => {
+    el.style.opacity = '0';
+    el.style.transition = 'opacity 0.4s ease';
+    setTimeout(() => { el.style.opacity = '1'; }, i * 60 + 150);
+  });
+});
+</script>
+</body>
+</html>
