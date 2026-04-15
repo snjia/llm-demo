@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大模型推理原理 · 交互动画</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Noto+Sans+SC:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        :root {
+            --bg: #060b14;
+            --card: #0d1420;
+            --card2: #111b2b;
+            --border: #1a2740;
+            --fg: #e2e8f0;
+            --muted: #5a6a82;
+            --accent: #00ffaa;
+            --accent-dim: rgba(0,255,170,0.1);
+            --accent-glow: rgba(0,255,170,0.4);
+            --warn: #f59e0b;
+            --danger: #ef4444;
+            --eos-color: #ff6b6b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 背景网格 */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(0,255,170,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,255,170,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* 背景光晕 */
+        body::after {
+            content: '';
+            position: fixed;
+            top: -30%;
+            right: -10%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(0,255,170,0.06) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Tab 按钮 */
+        .tab-btn {
+            position: relative;
+            padding: 12px 28px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--card);
+            color: var(--muted);
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 15px;
+            font-weight: 500;
+        }
+        .tab-btn:hover { border-color: var(--accent); color: var(--fg); }
+        .tab-btn.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+            box-shadow: 0 0 20px rgba(0,255,170,0.1);
+        }
+
+        /* 流水线容器 */
+        .pipeline-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            padding: 40px 20px;
+            min-height: 220px;
+        }
+
+        /* Token 方格 */
+        .token-box {
+            width: 48px; height: 48px;
+            display: flex; align-items: center; justify-content: center;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            background: var(--card);
+            transition: all 0.3s;
+        }
+        .token-box.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+            box-shadow: 0 0 12px rgba(0,255,170,0.2);
+        }
+        .token-box.output-token {
+            border-color: var(--warn);
+            color: var(--warn);
+            background: rgba(245,158,11,0.1);
+        }
+
+        /* 箭头 */
+        .arrow {
+            color: var(--muted);
+            font-size: 18px;
+            margin: 0 6px;
+            opacity: 0.4;
+            transition: opacity 0.3s;
+        }
+        .arrow.lit { opacity: 1; color: var(--accent); }
+
+        /* 层（房间） */
+        .layer-box {
+            width: 80px; height: 100px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            background: var(--card);
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 3px;
+            padding: 8px;
+            position: relative;
+            transition: all 0.3s;
+        }
+        .layer-box.lit {
+            border-color: var(--accent);
+            box-shadow: 0 0 25px rgba(0,255,170,0.15), inset 0 0 15px rgba(0,255,170,0.05);
+        }
+        .layer-label {
+            position: absolute;
+            bottom: -22px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        /* 参数开关（小方块） */
+        .param-dot {
+            width: 100%; height: 100%;
+            border-radius: 3px;
+            background: rgba(255,255,255,0.04);
+            transition: all 0.15s;
+        }
+        .param-dot.on {
+            background: var(--accent);
+            box-shadow: 0 0 6px var(--accent-glow);
+        }
+        .param-dot.warm {
+            background: rgba(0,255,170,0.3);
+        }
+
+        /* 电信号 */
+        .signal-dot {
+            position: absolute;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 16px var(--accent), 0 0 40px var(--accent-glow);
+            z-index: 10;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            transition: left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            display: none;
+        }
+        .signal-dot.visible { display: block; }
+
+        /* 打分黑板 */
+        .scoreboard {
+            min-width: 200px;
+            background: var(--card);
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            transition: all 0.3s;
+        }
+        .scoreboard.lit {
+            border-color: var(--accent);
+            box-shadow: 0 0 20px rgba(0,255,170,0.1);
+        }
+        .score-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            opacity: 0;
+            transform: translateX(10px);
+            transition: all 0.4s;
+        }
+        .score-row.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .score-char {
+            width: 44px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            background: var(--card2);
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+        .score-char.eos {
+            border-color: var(--eos-color);
+            color: var(--eos-color);
+            background: rgba(255,107,107,0.1);
+            font-size: 10px;
+        }
+        .score-bar-bg {
+            flex: 1; height: 20px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .score-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        .score-bar-fill.normal { background: linear-gradient(90deg, rgba(0,255,170,0.3), rgba(0,255,170,0.6)); }
+        .score-bar-fill.top { background: linear-gradient(90deg, var(--warn), #fcd34d); box-shadow: 0 0 10px rgba(245,158,11,0.3); }
+        .score-bar-fill.eos-bar { background: linear-gradient(90deg, rgba(255,107,107,0.3), var(--eos-color)); }
+        .score-val {
+            font-size: 12px;
+            color: var(--muted);
+            min-width: 52px;
+            text-align: right;
+        }
+        .score-val.top-val { color: var(--warn); font-weight: 700; }
+
+        /* 步骤说明 */
+        .step-desc {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px 24px;
+            min-height: 70px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            transition: all 0.3s;
+        }
+        .step-icon {
+            width: 40px; height: 40px;
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--accent-dim);
+            color: var(--accent);
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        /* 已输出区域 */
+        .output-area {
+            min-height: 56px;
+            background: var(--card);
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .output-area .token-box {
+            width: 42px; height: 42px;
+            font-size: 14px;
+            animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes popIn {
+            from { transform: scale(0); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .eos-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 1.5px solid var(--eos-color);
+            color: var(--eos-color);
+            background: rgba(255,107,107,0.1);
+            font-size: 13px;
+            font-weight: 700;
+            animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* 动画2 阶段卡片 */
+        .phase-card {
+            background: var(--card);
+            border: 1.5px solid var(--border);
+            border-radius: 14px;
+            padding: 28px;
+            transition: all 0.4s;
+        }
+        .phase-card.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 30px rgba(0,255,170,0.08);
+        }
+        .phase-btn {
+            padding: 10px 20px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--card);
+            color: var(--muted);
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        .phase-btn:hover { border-color: var(--accent); color: var(--fg); }
+        .phase-btn.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        /* 强制断电动画 */
+        .force-bar-bg {
+            height: 24px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+        .force-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent), var(--warn));
+            border-radius: 6px;
+            transition: width 0.05s linear;
+        }
+        .force-bar-fill.stopped {
+            background: var(--danger) !important;
+        }
+        .cut-line {
+            position: absolute;
+            right: 0;
+            top: -4px;
+            bottom: -4px;
+            width: 3px;
+            background: var(--danger);
+            box-shadow: 0 0 10px var(--danger);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .cut-line.show { opacity: 1; }
+
+        .broken-text {
+            color: var(--danger);
+            text-decoration: line-through;
+            opacity: 0.5;
+        }
+
+        /* 控制按钮 */
+        .ctrl-btn {
+            padding: 12px 28px;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+        }
+        .ctrl-btn.primary {
+            background: var(--accent);
+            color: var(--bg);
+        }
+        .ctrl-btn.primary:hover {
+            box-shadow: 0 0 20px var(--accent-glow);
+            transform: translateY(-1px);
+        }
+        .ctrl-btn.primary:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .ctrl-btn.secondary {
+            background: var(--card2);
+            color: var(--fg);
+            border: 1px solid var(--border);
+        }
+        .ctrl-btn.secondary:hover { border-color: var(--accent); }
+
+        /* 闪烁动画 */
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .blink { animation: blink 0.6s ease-in-out infinite; }
+
+        /* 完成庆祝 */
+        @keyframes celebrateGlow {
+            0% { box-shadow: 0 0 0 rgba(0,255,170,0); }
+            50% { box-shadow: 0 0 40px rgba(0,255,170,0.3); }
+            100% { box-shadow: 0 0 0 rgba(0,255,170,0); }
+        }
+        .celebrate { animation: celebrateGlow 1s ease-in-out; }
+
+        /* 响应式 */
+        @media (max-width: 900px) {
+            .pipeline-wrap { flex-wrap: wrap; gap: 8px; }
+            .layer-box { width: 60px; height: 76px; padding: 5px; }
+            .token-box { width: 38px; height: 38px; font-size: 13px; }
+            .scoreboard { min-width: 160px; padding: 12px; }
+            .arrow { margin: 0 3px; font-size: 14px; }
+        }
+
+        /* 减少动画偏好 */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    </style>
+</head>
+<body class="relative z-10">
+
+    <!-- 头部 -->
+    <header class="text-center pt-12 pb-8 px-4">
+        <p class="mono text-xs tracking-widest mb-4" style="color:var(--accent); opacity:0.7;">INTERACTIVE VISUALIZATION</p>
+        <h1 class="text-3xl md:text-4xl font-black tracking-tight mb-3" style="line-height:1.2;">
+            大模型推理原理
+            <span style="color:var(--accent);">·</span>
+            交互动画
+        </h1>
+        <p class="text-base md:text-lg" style="color:var(--muted); max-width:560px; margin:0 auto;">
+            两个核心问题：40B 参数怎么跑？什么时候停下来？
+        </p>
+    </header>
+
+    <!-- Tab 导航 -->
+    <nav class="flex justify-center gap-4 px-4 mb-8" role="tablist" aria-label="动画切换">
+        <button class="tab-btn active" data-tab="pipeline" role="tab" aria-selected="true" aria-controls="panel-pipeline">
+            <i class="fas fa-microchip mr-2"></i>参数流水线
+        </button>
+        <button class="tab-btn" data-tab="eostoken" role="tab" aria-selected="false" aria-controls="panel-eostoken">
+            <i class="fas fa-stop-circle mr-2"></i>下班卡机制
+        </button>
+    </nav>
+
+    <main class="max-w-6xl mx-auto px-4 pb-20">
+
+        <!-- ==================== 动画1：参数流水线 ==================== -->
+        <section id="panel-pipeline" role="tabpanel">
+            <!-- 概述 -->
+            <div class="step-desc mb-6">
+                <div class="step-icon"><i class="fas fa-lightbulb"></i></div>
+                <div>
+                    <p class="font-semibold mb-1">核心概念</p>
+                    <p class="text-sm" style="color:var(--muted);">
+                        输入的每个字变成电信号，穿过 5 层"房间"（每层约 8B 参数），房间里的开关被拨动，最后在黑板上给候选字打分，选出最高分的字输出。哪怕问题再简单，每一轮都要跑完这 40B 个开关。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 流水线可视化 -->
+            <div class="relative rounded-2xl p-4 mb-6" style="background:var(--card); border:1px solid var(--border);">
+                <div class="pipeline-wrap" id="pipelineArea">
+                    <!-- 输入tokens -->
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="flex gap-1" id="inputTokens"></div>
+                        <span class="text-xs" style="color:var(--muted);">输入层</span>
+                    </div>
+                    <div class="arrow" id="arrow0"><i class="fas fa-chevron-right"></i></div>
+
+                    <!-- 5个层 -->
+                    <div class="layer-box" id="layer0"></div>
+                    <div class="arrow" id="arrow1"><i class="fas fa-chevron-right"></i></div>
+                    <div class="layer-box" id="layer1"></div>
+                    <div class="arrow" id="arrow2"><i class="fas fa-chevron-right"></i></div>
+                    <div class="layer-box" id="layer2"></div>
+                    <div class="arrow" id="arrow3"><i class="fas fa-chevron-right"></i></div>
+                    <div class="layer-box" id="layer3"></div>
+                    <div class="arrow" id="arrow4"><i class="fas fa-chevron-right"></i></div>
+                    <div class="layer-box" id="layer4"></div>
+                    <div class="arrow" id="arrow5"><i class="fas fa-chevron-right"></i></div>
+
+                    <!-- 打分黑板 -->
+                    <div class="scoreboard" id="scoreboard">
+                        <div class="text-xs font-semibold mb-3" style="color:var(--muted);">
+                            <i class="fas fa-chalkboard mr-1"></i> 打分黑板
+                        </div>
+                        <div id="scoreRows"></div>
+                    </div>
+
+                    <!-- 电信号 -->
+                    <div class="signal-dot" id="signalDot"></div>
+                </div>
+            </div>
+
+            <!-- 步骤说明 -->
+            <div class="step-desc mb-6" id="stepDesc">
+                <div class="step-icon" id="stepIcon"><i class="fas fa-play"></i></div>
+                <div>
+                    <p class="font-semibold text-sm" id="stepTitle">准备好了吗？</p>
+                    <p class="text-sm" style="color:var(--muted);" id="stepText">
+                        点击下方按钮，观看模型如何逐字生成回答。每一轮都会完整跑过 40B 参数。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 已输出 -->
+            <div class="mb-6">
+                <div class="text-xs font-semibold mb-2" style="color:var(--muted);">
+                    <i class="fas fa-terminal mr-1"></i> 已输出
+                </div>
+                <div class="output-area" id="outputArea">
+                    <span class="text-sm" style="color:var(--muted);" id="outputPlaceholder">等待生成...</span>
+                </div>
+            </div>
+
+            <!-- 控制按钮 -->
+            <div class="flex gap-3 justify-center">
+                <button class="ctrl-btn primary" id="btnNext" onclick="runNextStep()">
+                    <i class="fas fa-play mr-2"></i>开始生成
+                </button>
+                <button class="ctrl-btn secondary" id="btnReset" onclick="resetPipeline()">
+                    <i class="fas fa-redo mr-2"></i>重置
+                </button>
+            </div>
+        </section>
+
+        <!-- ==================== 动画2：下班卡机制 ==================== -->
+        <section id="panel-eostoken" role="tabpanel" style="display:none;">
+            <!-- 概述 -->
+            <div class="step-desc mb-6">
+                <div class="step-icon" style="background:rgba(255,107,107,0.1); color:var(--eos-color);"><i class="fas fa-flag-checkered"></i></div>
+                <div>
+                    <p class="font-semibold mb-1">核心概念</p>
+                    <p class="text-sm" style="color:var(--muted);">
+                        模型没有"我说完了"的意识。它的停止，纯粹是因为打分黑板上角落里有一张特殊的【下班】卡，当它的分数超过所有正常字时，循环就被打破。如果它忘了选下班卡，就只能"暴力断电"。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 阶段切换 -->
+            <div class="flex gap-3 justify-center mb-6 flex-wrap">
+                <button class="phase-btn active" data-phase="0" onclick="switchPhase(0)">
+                    <i class="fas fa-comment-dots mr-1"></i> 话没说完
+                </button>
+                <button class="phase-btn" data-phase="1" onclick="switchPhase(1)">
+                    <i class="fas fa-check-circle mr-1"></i> 话说完了
+                </button>
+                <button class="phase-btn" data-phase="2" onclick="switchPhase(2)">
+                    <i class="fas fa-bolt mr-1"></i> 暴力断电
+                </button>
+            </div>
+
+            <!-- 阶段内容 -->
+            <div id="phaseContainer"></div>
+        </section>
+
+    </main>
+
+    <script>
+        /* ========== 工具函数 ========== */
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        /* ========== Tab 切换 ========== */
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => {
+                    b.classList.remove('active');
+                    b.setAttribute('aria-selected', 'false');
+                });
+                btn.classList.add('active');
+                btn.setAttribute('aria-selected', 'true');
+
+                const tab = btn.dataset.tab;
+                document.getElementById('panel-pipeline').style.display = tab === 'pipeline' ? '' : 'none';
+                document.getElementById('panel-eostoken').style.display = tab === 'eostoken' ? '' : 'none';
+            });
+        });
+
+        /* ========================================================
+         *  动画1：参数流水线
+         * ======================================================== */
+
+        /* 数据定义 */
+        const INPUT_TOKENS = ['你', '是', '什', '么', '模', '型'];
+        /* 模型将逐字输出的序列，最后一项是EOS */
+        const OUTPUT_STEPS = [
+            {
+                candidates: [
+                    { char: '我', score: 0.95 },
+                    { char: '苹', score: 0.002 },
+                    { char: '它', score: 0.003 },
+                    { char: '下班', score: 0.00001, isEos: true }
+                ]
+            },
+            {
+                candidates: [
+                    { char: '是', score: 0.94 },
+                    { char: '不', score: 0.04 },
+                    { char: '的', score: 0.005 },
+                    { char: '下班', score: 0.0001, isEos: true }
+                ]
+            },
+            {
+                candidates: [
+                    { char: 'G', score: 0.88 },
+                    { char: '一', score: 0.06 },
+                    { char: '个', score: 0.03 },
+                    { char: '下班', score: 0.0002, isEos: true }
+                ]
+            },
+            {
+                candidates: [
+                    { char: 'L', score: 0.91 },
+                    { char: '大', score: 0.05 },
+                    { char: '的', score: 0.02 },
+                    { char: '下班', score: 0.0003, isEos: true }
+                ]
+            },
+            {
+                candidates: [
+                    { char: 'M', score: 0.93 },
+                    { char: '语', score: 0.03 },
+                    { char: '一', score: 0.02 },
+                    { char: '下班', score: 0.0005, isEos: true }
+                ]
+            },
+            {
+                candidates: [
+                    { char: '大', score: 0.89 },
+                    { char: '小', score: 0.06 },
+                    { char: '好', score: 0.03 },
+                    { char: '下班', score: 0.001, isEos: true }
+                ]
+            },
+            {
+                candidates: [
+                    { char: '语', score: 0.92 },
+                    { char: '数', score: 0.04 },
+                    { char: '文', score: 0.02 },
+                    { char: '下班', score: 0.002, isEos: true }
+                ]
+            },
+            {
+                candidates: [
+                    { char: '言', score: 0.90 },
+                    { char: '字', score: 0.05 },
+                    { char: '法', score: 0.03 },
+                    { char: '下班', score: 0.003, isEos: true }
+                ]
+            },
+            {
+                candidates: [
+                    { char: '模', score: 0.91 },
+                    { char: '算', score: 0.04 },
+                    { char: '程', score: 0.03 },
+                    { char: '下班', score: 0.01, isEos: true }
+                ]
+            },
+            {
+                candidates: [
+                    { char: '型', score: 0.87 },
+                    { char: '块', score: 0.05 },
+                    { char: '器', score: 0.04 },
+                    { char: '下班', score: 0.02, isEos: true }
+                ]
+            },
+            {
+                candidates: [
+                    { char: '。', score: 0.78 },
+                    { char: '，', score: 0.12 },
+                    { char: '我', score: 0.05 },
+                    { char: '下班', score: 0.92, isEos: true }
+                ]
+            }
+        ];
+
+        let currentStep = -1;       // 当前生成的步骤（-1=未开始）
+        let isRunning = false;       // 动画是否正在播放
+        let finished = false;        // 是否已生成完毕（遇到EOS）
+
+        /* DOM 引用 */
+        const inputTokensEl = document.getElementById('inputTokens');
+        const signalDot = document.getElementById('signalDot');
+        const scoreRowsEl = document.getElementById('scoreRows');
+        const scoreboardEl = document.getElementById('scoreboard');
+        const outputArea = document.getElementById('outputArea');
+        const outputPlaceholder = document.getElementById('outputPlaceholder');
+        const btnNext = document.getElementById('btnNext');
+        const stepTitle = document.getElementById('stepTitle');
+        const stepText = document.getElementById('stepText');
+        const stepIcon = document.getElementById('stepIcon');
+        const layerEls = [];
+        const arrowEls = [];
+
+        /* 初始化：构建输入tokens和层中的参数开关 */
+        function initPipeline() {
+            /* 输入tokens */
+            INPUT_TOKENS.forEach(ch => {
+                const div = document.createElement('div');
+                div.className = 'token-box active';
+                div.textContent = ch;
+                inputTokensEl.appendChild(div);
+            });
+
+            /* 层中的参数开关 */
+            for (let i = 0; i < 5; i++) {
+                const layer = document.getElementById('layer' + i);
+                layerEls.push(layer);
+                const label = document.createElement('span');
+                label.className = 'layer-label mono';
+                label.textContent = 'Layer ' + (i + 1);
+                layer.appendChild(label);
+                for (let j = 0; j < 9; j++) {
+                    const dot = document.createElement('div');
+                    dot.className = 'param-dot';
+                    layer.insertBefore(dot, label);
+                }
+            }
+
+            /* 箭头 */
+            for (let i = 0; i < 6; i++) {
+                arrowEls.push(document.getElementById('arrow' + i));
+            }
+        }
+        initPipeline();
+
+        /* 获取信号需要经过的关键X坐标 */
+        function getSignalPositions() {
+            const area = document.getElementById('pipelineArea');
+            const areaRect = area.getBoundingClientRect();
+            const positions = [];
+
+            /* 输入tokens右边 */
+            const inputRight = inputTokensEl.getBoundingClientRect().right - areaRect.left + 10;
+            positions.push(inputRight);
+
+            /* 每个层的中心 */
+            layerEls.forEach(layer => {
+                const r = layer.getBoundingClientRect();
+                positions.push(r.left + r.width / 2 - areaRect.left);
+            });
+
+            /* 黑板左边 */
+            const sbLeft = scoreboardEl.getBoundingClientRect().left - areaRect.left;
+            positions.push(sbLeft);
+
+            return positions;
+        }
+
+        /* 设置步骤说明 */
+        function setStep(icon, title, text) {
+            stepIcon.innerHTML = '<i class="fas fa-' + icon + '"></i>';
+            stepTitle.textContent = title;
+            stepText.textContent = text;
+        }
+
+        /* 随机激活参数开关 */
+        function flickerParams(layerIdx) {
+            const layer = layerEls[layerIdx];
+            const dots = layer.querySelectorAll('.param-dot');
+            dots.forEach(d => {
+                const rand = Math.random();
+                if (rand > 0.35) {
+                    d.className = 'param-dot on';
+                } else if (rand > 0.15) {
+                    d.className = 'param-dot warm';
+                } else {
+                    d.className = 'param-dot';
+                }
+            });
+        }
+
+        /* 重置参数开关 */
+        function resetParams(layerIdx) {
+            const layer = layerEls[layerIdx];
+            const dots = layer.querySelectorAll('.param-dot');
+            dots.forEach(d => { d.className = 'param-dot'; });
+        }
+
+        /* 重置所有参数 */
+        function resetAllParams() {
+            layerEls.forEach((_, i) => resetParams(i));
+        }
+
+        /* 点亮/熄灭层 */
+        function setLayerLit(idx, lit) {
+            layerEls[idx].classList.toggle('lit', lit);
+        }
+
+        /* 点亮/熄灭箭头 */
+        function setArrowLit(idx, lit) {
+            arrowEls[idx].classList.toggle('lit', lit);
+        }
+
+        /* 渲染打分行 */
+        function renderScoreRows(candidates) {
+            scoreRowsEl.innerHTML = '';
+            /* 找到最高分 */
+            const maxScore = Math.max(...candidates.map(c => c.score));
+
+            candidates.forEach((c, i) => {
+                const row = document.createElement('div');
+                row.className = 'score-row';
+                row.style.transitionDelay = (i * 0.08) + 's';
+
+                const charBox = document.createElement('div');
+                charBox.className = 'score-char' + (c.isEos ? ' eos' : '');
+                charBox.textContent = c.isEos ? '下班' : c.char;
+
+                const barBg = document.createElement('div');
+                barBg.className = 'score-bar-bg';
+                const barFill = document.createElement('div');
+                barFill.className = 'score-bar-fill';
+                if (c.score === maxScore) {
+                    barFill.classList.add(c.isEos ? 'eos-bar' : 'top');
+                } else {
+                    barFill.classList.add('normal');
+                }
+                barBg.appendChild(barFill);
+
+                const val = document.createElement('span');
+                val.className = 'score-val' + (c.score === maxScore ? ' top-val' : '');
+                val.textContent = c.score < 0.001 ? c.score.toExponential(1) : c.score.toFixed(3);
+
+                row.appendChild(charBox);
+                row.appendChild(barBg);
+                row.appendChild(val);
+                scoreRowsEl.appendChild(row);
+
+                /* 延迟显示和填充 */
+                setTimeout(() => {
+                    row.classList.add('show');
+                    /* 分数条宽度：相对于最大分做缩放 */
+                    const width = Math.max(2, (c.score / maxScore) * 100);
+                    barFill.style.width = width + '%';
+                }, 50);
+            });
+        }
+
+        /* 清空打分板 */
+        function clearScoreboard() {
+            scoreRowsEl.innerHTML = '';
+            scoreboardEl.classList.remove('lit');
+        }
+
+        /* 添加输出token */
+        function addOutputToken(char, isEos) {
+            if (outputPlaceholder) outputPlaceholder.remove();
+            if (isEos) {
+                const badge = document.createElement('span');
+                badge.className = 'eos-badge';
+                badge.innerHTML = '<i class="fas fa-power-off"></i> EOS 循环终止';
+                outputArea.appendChild(badge);
+            } else {
+                const box = document.createElement('div');
+                box.className = 'token-box output-token';
+                box.textContent = char;
+                outputArea.appendChild(box);
+            }
+        }
+
+        /* 主运行：生成下一个字 */
+        async function runNextStep() {
+            if (isRunning || finished) return;
+            isRunning = true;
+            btnNext.disabled = true;
+
+            currentStep++;
+            const step = OUTPUT_STEPS[currentStep];
+            const isLastStep = step.candidates.some(c => c.isEos && c.score === Math.max(...step.candidates.map(x => x.score)));
+
+            /* 获取位置 */
+            const positions = getSignalPositions();
+
+            /* 重置状态 */
+            resetAllParams();
+            clearScoreboard();
+            layerEls.forEach((_, i) => setLayerLit(i, false));
+            arrowEls.forEach((_, i) => setArrowLit(i, false));
+
+            /* 步骤1：电信号从输入出发 */
+            setStep('bolt', '第 ' + (currentStep + 1) + ' 轮推理开始',
+                '输入 "' + INPUT_TOKENS.join('') + (currentStep > 0 ? OUTPUT_STEPS.slice(0, currentStep).map(s => s.candidates.find(c => c.score === Math.max(...s.candidates.map(x => x.score))).char).join('') : '') + '" 变成电信号，向第一层出发');
+            signalDot.classList.add('visible');
+            signalDot.style.left = positions[0] + 'px';
+            await delay(400);
+
+            /* 步骤2：依次穿过5层 */
+            for (let i = 0; i < 5; i++) {
+                setArrowLit(i, true);
+                signalDot.style.left = positions[i + 1] + 'px';
+                await delay(200);
+
+                setLayerLit(i, true);
+                flickerParams(i);
+                setStep('cog', '穿过第 ' + (i + 1) + ' 层（~8B 参数）',
+                    '约 80 亿个"开关"被拨动——做乘法和加法运算，提取不同层级的特征');
+                await delay(350);
+
+                /* 参数闪几下后渐暗 */
+                const dots = layerEls[i].querySelectorAll('.param-dot');
+                dots.forEach(d => { if (d.classList.contains('on')) d.classList.remove('on'); });
+                await delay(100);
+            }
+
+            /* 步骤3：到达打分黑板 */
+            setArrowLit(5, true);
+            signalDot.style.left = positions[6] + 'px';
+            scoreboardEl.classList.add('lit');
+            setStep('chalkboard', '到达打分黑板',
+                '电信号走完全部 5 层后，转化为最终结果，开始给字典里的字打分');
+            await delay(400);
+
+            /* 步骤4：打分动画 */
+            renderScoreRows(step.candidates);
+            const topCandidate = step.candidates.find(c => c.score === Math.max(...step.candidates.map(x => x.score)));
+            await delay(800);
+
+            /* 步骤5：宣布结果 */
+            signalDot.classList.remove('visible');
+            if (isLastStep) {
+                setStep('flag-checkered', '选中【下班】卡！回答完成',
+                    '【下班】卡（EOS）得分 ' + topCandidate.score.toFixed(2) + '，超过所有正常字，循环被打破，模型停止生成');
+                addOutputToken('', true);
+                outputArea.classList.add('celebrate');
+                finished = true;
+                btnNext.innerHTML = '<i class="fas fa-check mr-2"></i>演示完成';
+            } else {
+                setStep('star', '最高分："' + topCandidate.char + '"（' + topCandidate.score.toFixed(3) + '）',
+                    '虽然经过了 40B 参数的完整计算，但注意：【下班】卡也参与了打分，只是分数极低（' + step.candidates.find(c => c.isEos).score.toExponential(1) + '），不会被选中');
+                addOutputToken(topCandidate.char, false);
+            }
+
+            await delay(300);
+            isRunning = false;
+            if (!finished) {
+                btnNext.disabled = false;
+                btnNext.innerHTML = '<i class="fas fa-forward mr-2"></i>生成下一个字';
+            }
+        }
+
+        /* 重置 */
+        function resetPipeline() {
+            isRunning = false;
+            finished = false;
+            currentStep = -1;
+
+            resetAllParams();
+            clearScoreboard();
+            layerEls.forEach((_, i) => setLayerLit(i, false));
+            arrowEls.forEach((_, i) => setArrowLit(i, false));
+            signalDot.classList.remove('visible');
+
+            outputArea.innerHTML = '<span class="text-sm" style="color:var(--muted);" id="outputPlaceholder">等待生成...</span>';
+            outputArea.classList.remove('celebrate');
+
+            setStep('play', '准备好了吗？', '点击下方按钮，观看模型如何逐字生成回答。每一轮都会完整跑过 40B 参数。');
+            btnNext.disabled = false;
+            btnNext.innerHTML = '<i class="fas fa-play mr-2"></i>开始生成';
+        }
+
+
+        /* ========================================================
+         *  动画2：下班卡机制
+         * ======================================================== */
+
+        const PHASES = [
+            {
+                title: '话还没说完',
+                desc: '模型正在组织回答的开头。此时【下班】卡的分数极低（0.00001），远低于正常字"我"（0.95），所以模型继续输出，不会停止。',
+                context: '输入："你是什么模型"\n当前状态：准备输出第一个字',
+                candidates: [
+                    { char: '我', score: 0.95 },
+                    { char: '苹', score: 0.002 },
+                    { char: '它', score: 0.003 },
+                    { char: '下班', score: 0.00001, isEos: true }
+                ],
+                highlight: null
+            },
+            {
+                title: '话说完了',
+                desc: '模型已经输出了"我是GLM大语言模型。"这个完整句子。此时上下文逻辑已经闭环，【下班】卡分数飙升到 0.92，超过所有正常字，被选中——循环终止！',
+                context: '输入："你是什么模型"\n已输出："我是GLM大语言模型。"\n当前状态：准备输出下一个字',
+                candidates: [
+                    { char: '，', score: 0.05 },
+                    { char: '我', score: 0.02 },
+                    { char: '的', score: 0.01 },
+                    { char: '下班', score: 0.92, isEos: true }
+                ],
+                highlight: 'eos'
+            },
+            {
+                title: '暴力断电（兜底方案）',
+                desc: '如果模型陷入胡言乱语，【下班】卡分数始终不高，它就会无限循环。这时系统设置的 max_tokens（最大生成长度）生效——达到上限后直接强制切断，不问了。',
+                context: '模型陷入死循环，不停重复无效内容...',
+                isForceStop: true
+            }
+        ];
+
+        let currentPhase = 0;
+        let forceStopAnim = null;
+
+        function switchPhase(idx) {
+            currentPhase = idx;
+            document.querySelectorAll('.phase-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.phase-btn[data-phase="' + idx + '"]').classList.add('active');
+            renderPhase(idx);
+        }
+
+        function renderPhase(idx) {
+            if (forceStopAnim) { clearInterval(forceStopAnim); forceStopAnim = null; }
+
+            const phase = PHASES[idx];
+            const container = document.getElementById('phaseContainer');
+
+            if (phase.isForceStop) {
+                container.innerHTML = `
+                    <div class="phase-card active">
+                        <h3 class="text-lg font-bold mb-2" style="color:var(--danger);">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>${phase.title}
+                        </h3>
+                        <p class="text-sm mb-4" style="color:var(--muted);">${phase.desc}</p>
+                        <div class="rounded-xl p-4 mb-4" style="background:var(--card2); border:1px solid var(--border);">
+                            <div class="mono text-xs mb-3" style="color:var(--muted); white-space:pre-line;">${phase.context}</div>
+                            <div class="flex gap-2 flex-wrap mb-4" id="garbageOutput" style="min-height:40px;"></div>
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="text-xs mono" style="color:var(--muted);">0</span>
+                                <div class="force-bar-bg flex-1">
+                                    <div class="force-bar-fill" id="forceBar"></div>
+                                    <div class="cut-line" id="cutLine"></div>
+                                </div>
+                                <span class="text-xs mono" style="color:var(--muted);">max_tokens (4096)</span>
+                            </div>
+                            <div id="forceStatus" class="text-sm font-semibold mt-3" style="color:var(--muted); min-height:24px;"></div>
+                        </div>
+                        <button class="ctrl-btn primary" onclick="startForceStop()" id="btnForce">
+                            <i class="fas fa-play mr-2"></i>演示暴力断电
+                        </button>
+                    </div>
+                `;
+            } else {
+                const maxScore = Math.max(...phase.candidates.map(c => c.score));
+                let rowsHtml = '';
+                phase.candidates.forEach((c, i) => {
+                    const isTop = c.score === maxScore;
+                    const barClass = isTop ? (c.isEos ? 'eos-bar' : 'top') : 'normal';
+                    const width = Math.max(2, (c.score / maxScore) * 100);
+                    const eosClass = c.isEos ? ' eos' : '';
+                    const valClass = isTop ? ' top-val' : '';
+                    const scoreText = c.score < 0.001 ? c.score.toExponential(1) : c.score.toFixed(3);
+                    const highlightBorder = (phase.highlight === 'eos' && c.isEos && isTop) ? 'border:2px solid var(--eos-color); box-shadow:0 0 15px rgba(255,107,107,0.3);' : '';
+
+                    rowsHtml += `
+                        <div class="score-row show" style="transition-delay:${i * 0.1}s; ${highlightBorder}">
+                            <div class="score-char${eosClass}">${c.isEos ? '下班' : c.char}</div>
+                            <div class="score-bar-bg">
+                                <div class="score-bar-fill ${barClass}" style="width:${width}%;"></div>
+                            </div>
+                            <span class="score-val${valClass}">${scoreText}</span>
+                            ${isTop ? '<i class="fas fa-arrow-left" style="color:' + (c.isEos ? 'var(--eos-color)' : 'var(--warn)') + '; font-size:12px; margin-left:-8px;"></i>' : ''}
+                        </div>
+                    `;
+                });
+
+                const accentColor = phase.highlight === 'eos' ? 'var(--eos-color)' : 'var(--accent)';
+
+                container.innerHTML = `
+                    <div class="phase-card active">
+                        <h3 class="text-lg font-bold mb-2" style="color:${accentColor};">
+                            <i class="fas fa-${phase.highlight === 'eos' ? 'check-circle' : 'comment-dots'} mr-2"></i>${phase.title}
+                        </h3>
+                        <p class="text-sm mb-4" style="color:var(--muted);">${phase.desc}</p>
+                        <div class="flex flex-col md:flex-row gap-4">
+                            <div class="flex-1 rounded-xl p-4" style="background:var(--card2); border:1px solid var(--border);">
+                                <div class="mono text-xs mb-3" style="color:var(--muted); white-space:pre-line;">${phase.context}</div>
+                                <div class="text-sm font-semibold mb-3" style="color:var(--fg);">
+                                    <i class="fas fa-chalkboard mr-1"></i> 黑板打分结果
+                                </div>
+                                ${rowsHtml}
+                            </div>
+                            <div class="md:w-48 flex flex-col justify-center">
+                                <div class="rounded-xl p-4 text-center" style="background:${phase.highlight === 'eos' ? 'rgba(255,107,107,0.1)' : 'var(--accent-dim)'}; border:1px solid ${phase.highlight === 'eos' ? 'var(--eos-color)' : 'var(--border)'};">
+                                    <div class="text-3xl font-black mb-2" style="color:${accentColor};">
+                                        ${phase.highlight === 'eos' ? 'STOP' : 'CONTINUE'}
+                                    </div>
+                                    <div class="text-xs" style="color:var(--muted);">
+                                        ${phase.highlight === 'eos' ? '【下班】卡被选中<br>循环终止' : '【下班】卡分数太低<br>继续生成下一个字'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        /* 暴力断电动画 */
+        function startForceStop() {
+            const btn = document.getElementById('btnForce');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>演示中...';
+
+            const bar = document.getElementById('forceBar');
+            const cutLine = document.getElementById('cutLine');
+            const status = document.getElementById('forceStatus');
+            const garbage = document.getElementById('garbageOutput');
+
+            bar.style.width = '0%';
+            bar.classList.remove('stopped');
+            cutLine.classList.remove('show');
+            garbage.innerHTML = '';
+            status.textContent = '';
+            status.style.color = 'var(--muted)';
+
+            const garbageChars = ['的', '了', '我', '是', '在', '有', '和', '人', '这', '中', '大', '为', '上', '个', '国', '不', '到', '会', '说', '时'];
+            let progress = 0;
+            let charCount = 0;
+            let stopped = false;
+
+            forceStopAnim = setInterval(() => {
+                if (stopped) return;
+
+                progress += 0.3 + Math.random() * 0.4;
+                if (progress > 100) progress = 100;
+
+                bar.style.width = progress + '%';
+                charCount = Math.floor(progress / 100 * 4096);
+                status.textContent = '已生成 ' + charCount + ' / 4096 tokens...';
+                status.style.color = progress > 80 ? 'var(--warn)' : 'var(--muted)';
+
+                /* 随机添加垃圾字 */
+                if (Math.random() > 0.4 && garbage.children.length < 30) {
+                    const span = document.createElement('span');
+                    span.className = 'token-box output-token';
+                    span.textContent = garbageChars[Math.floor(Math.random() * garbageChars.length)];
+                    span.style.opacity = '0.5';
+                    garbage.appendChild(span);
+                }
+
+                if (progress >= 100) {
+                    stopped = true;
+                    clearInterval(forceStopAnim);
+                    forceStopAnim = null;
+
+                    bar.classList.add('stopped');
+                    cutLine.classList.add('show');
+
+                    /* 把所有字加上删除线 */
+                    garbage.querySelectorAll('.token-box').forEach(el => {
+                        el.classList.add('broken-text');
+                    });
+
+                    status.innerHTML = '<i class="fas fa-bolt mr-1"></i> 达到 max_tokens 上限，强制断电！循环终止。';
+                    status.style.color = 'var(--danger)';
+
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-redo mr-2"></i>重新演示';
+                    btn.onclick = startForceStop;
+                }
+            }, 30);
+        }
+
+        /* 初始化动画2 */
+        switchPhase(0);
+    </script>
+</body>
+</html>
