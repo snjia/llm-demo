@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>GLM-5 40B参数调用动画演示</title>
+    <style>
+        body {
+            background-color: #0a0a0a;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { color: #00ffcc; font-size: 24px; margin-bottom: 5px; }
+        .subtitle { color: #888; margin-bottom: 20px; font-size: 14px; }
+        
+        /* 上下文输入框 */
+        .input-context {
+            background: #111;
+            border: 1px solid #333;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 20px;
+            margin-bottom: 20px;
+            min-height: 30px;
+            text-align: center;
+        }
+        .input-context .cursor {
+            display: inline-block;
+            width: 2px;
+            height: 20px;
+            background: #00ffcc;
+            vertical-align: text-bottom;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* 动画主画布 */
+        #animationCanvas {
+            background: #050505;
+            border: 1px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.1);
+        }
+
+        /* 状态说明文字 */
+        #statusText {
+            margin-top: 20px;
+            font-size: 18px;
+            height: 30px;
+            color: #00ffcc;
+            font-weight: bold;
+            text-align: center;
+            transition: opacity 0.3s;
+        }
+        #explanationText {
+            font-size: 14px;
+            color: #aaa;
+            max-width: 800px;
+            text-align: center;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>GLM-5 参数调动微观视角</h1>
+    <div class="subtitle">每一次生成一个字（Token），都在经历这个循环</div>
+
+    <div class="input-context">
+        你是什么模型？ -> 我是<span id="currentOutput"></span><span class="cursor"></span>
+    </div>
+
+    <canvas id="animationCanvas" width="800" height="400"></canvas>
+
+    <div id="statusText">初始化中...</div>
+    <div id="explanationText">准备展示 MoE 路由机制与矩阵计算过程</div>
+
+<script>
+    const canvas = document.getElementById('animationCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusText = document.getElementById('statusText');
+    const explanationText = document.getElementById('explanationText');
+    const currentOutput = document.getElementById('currentOutput');
+
+    // 动画状态机
+    const STATES = {
+        IDLE: 0,
+        ROUTING: 1,    // 前台调度员
+        COMPUTING: 2,  // 推子大狂欢
+        VOTING: 3,     // 最终计票器
+        APPEND: 4      // 追加字符
+    };
+
+    let state = STATES.IDLE;
+    let stateTimer = 0;
+    let generatedWord = "智";
+
+    // 模拟参数推子
+    const totalDots = 2000; // 背景代表 744B
+    const activeFaders = 60; // 放大看代表 40B
+    let dots = [];
+    let faders = [];
+
+    // 初始化背景点
+    for(let i=0; i<totalDots; i++) {
+        dots.push({
+            x: Math.random() * 800,
+            y: Math.random() * 400,
+            size: Math.random() * 2,
+            isActive: false
+        });
+    }
+
+    // 初始化推子区域 (在画布中央放大显示)
+    for(let i=0; i<activeFaders; i++) {
+        faders.push({
+            x: 200 + (i * (400/activeFaders)),
+            baseY: 350,
+            height: 0,
+            targetHeight: 0,
+            color: `hsl(${160 + Math.random()*40}, 100%, 50%)` // 青色系
+        });
+    }
+
+    // 动画帧循环
+    let lastTime = 0;
+    function animate(time) {
+        const deltaTime = time - lastTime;
+        lastTime = time;
+        stateTimer += deltaTime;
+
+        ctx.clearRect(0, 0, 800, 400);
+
+        switch(state) {
+            case STATES.IDLE: runIdle(); break;
+            case STATES.ROUTING: runRouting(); break;
+            case STATES.COMPUTING: runComputing(); break;
+            case STATES.VOTING: runVoting(); break;
+            case STATES.APPEND: runAppend(); break;
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    // 阶段0：休眠
+    function runIdle() {
+        statusText.innerText = "等待输入信号...";
+        explanationText.innerText = "7440亿个参数处于休眠状态，就像工厂里没通电的设备。";
+        drawDots(false);
+        if(stateTimer > 1500) { state = STATES.ROUTING; stateTimer = 0; resetFaders(); }
+    }
+
+    // 阶段1：MoE 路由唤醒
+    function runRouting() {
+        statusText.innerText = "第一阶段：前台调度员";
+        explanationText.innerText = "MoE路由机制判断问题类型，决定只唤醒其中 40B 个专家参数（高亮部分）。";
+        
+        // 模拟逐渐点亮中间区域
+        let progress = Math.min(stateTimer / 1500, 1);
+        drawDots(false);
+        
+        ctx.fillStyle = "rgba(0, 255, 204, 0.1)";
+        ctx.fillRect(150, 50, 500, 300);
+        ctx.strokeStyle = "#00ffcc";
+        ctx.strokeRect(150, 50, 500, 300);
+        ctx.fillStyle = "#fff";
+        ctx.font = "16px Arial";
+        ctx.fillText("聚焦激活区 (40B 参数)", 320, 40);
+
+        if(stateTimer > 2000) { state = STATES.COMPUTING; stateTimer = 0; }
+    }
+
+    // 阶段2：矩阵乘法（推子大狂欢）
+    function runComputing() {
+        statusText.innerText = "第二阶段：400亿个推子同时拨动";
+        explanationText.innerText = "电信号穿过，40B 个参数（推子）进行疯狂的矩阵乘法运算，调整每个字的概率！";
+        
+        drawDots(false);
+        ctx.fillStyle = "rgba(0, 20, 20, 0.9)";
+        ctx.fillRect(150, 50, 500, 300);
+
+        // 让推子疯狂随机动
+        if(stateTimer % 100 < 16) { // 大约每秒随机6次目标高度
+            faders.forEach(f => {
+                f.targetHeight = Math.random() * 250 + 20;
+            });
+        }
+
+        // 绘制推子
+        faders.forEach(f => {
+            f.height += (f.targetHeight - f.height) * 0.2; // 平滑过渡
+            ctx.fillStyle = f.color;
+            ctx.shadowColor = f.color;
+            ctx.shadowBlur = 10;
+            ctx.fillRect(f.x - 2, f.baseY - f.height, 4, f.height);
+            ctx.shadowBlur = 0;
+            // 滑块
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(f.x - 4, f.baseY - f.height - 4, 8, 8);
+        });
+
+        if(stateTimer > 3000) { state = STATES.VOTING; stateTimer = 0; }
+    }
+
+    // 阶段3：最终计票
+    function runVoting() {
+        statusText.innerText = "第三阶段：最终计票器输出";
+        explanationText.innerText = "狂欢结束，信号汇聚。计票器显示：'智'字概率 95%，'猪'字概率 1%。";
+        
+        drawDots(false);
+        ctx.fillStyle = "rgba(0, 20, 20, 0.9)";
+        ctx.fillRect(150, 50, 500, 300);
+
+        // 推子静止
+        faders.forEach(f => {
+            f.height += (100 - f.height) * 0.1; // 归于平静
+            ctx.fillStyle = "rgba(0, 255, 204, 0.3)";
+            ctx.fillRect(f.x - 1, f.baseY - f.height, 2, f.height);
+        });
+
+        // 画一个简单的柱状图代表计票
+        let progress = Math.min(stateTimer / 1000, 1);
+        
+        ctx.fillStyle = "#00ffcc";
+        ctx.fillRect(350, 300 - (200 * progress), 60, 200 * progress);
+        ctx.fillStyle = "#fff";
+        ctx.font = "24px Arial";
+        ctx.fillText("智", 365, 290);
+        ctx.font = "14px Arial";
+        ctx.fillText("95%", 360, 315);
+
+        ctx.fillStyle = "#333";
+        ctx.fillRect(450, 300 - (20 * progress), 40, 20 * progress);
+        ctx.fillStyle = "#888";
+        ctx.fillText("猪", 460, 290);
+        ctx.fillText("1%", 458, 315);
+
+        if(stateTimer > 2500) { state = STATES.APPEND; stateTimer = 0; }
+    }
+
+    // 阶段4：追加字符，准备下一轮
+    function runAppend() {
+        statusText.innerText = "循环完成！准备下一轮...";
+        explanationText.innerText = "把'智'字加到历史记录里，然后整个40B调用过程再重来一次，去猜下一个字'谱'。";
+        drawDots(false);
+
+        if(stateTimer === 0) {
+            currentOutput.innerText += generatedWord;
+        }
+
+        if(stateTimer > 2000) { 
+            state = STATES.IDLE; 
+            stateTimer = 0; 
+            if(generatedWord === "智") generatedWord = "谱";
+            else if(generatedWord === "谱") generatedWord = "清";
+            else if(generatedWord === "清") generatedWord = "言";
+            else generatedWord = "。"; // 演示结束
+        }
+    }
+
+    // 辅助函数：画背景点阵
+    function drawDots(showActive) {
+        dots.forEach(d => {
+            ctx.fillStyle = showActive && d.isActive ? "#00ffcc" : "#222";
+            ctx.fillRect(d.x, d.y, d.size, d.size);
+        });
+    }
+
+    function resetFaders() {
+        faders.forEach(f => f.height = 0);
+    }
+
+    // 启动动画
+    requestAnimationFrame(animate);
+
+</script>
+</body>
+</html>

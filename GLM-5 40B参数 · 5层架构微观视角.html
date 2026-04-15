@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>GLM-5 40B参数5层调用动画</title>
+    <style>
+        body {
+            background-color: #050508;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        h1 { color: #00ffcc; font-size: 22px; margin-bottom: 5px; letter-spacing: 2px;}
+        .subtitle { color: #666; margin-bottom: 20px; font-size: 13px; }
+        
+        /* 对话框区域 */
+        .chat-container {
+            width: 820px;
+            background: #0d0d12;
+            border: 1px solid #222;
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .chat-bubble {
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            line-height: 1.4;
+            max-width: 80%;
+        }
+        .user-bubble {
+            background: #1a1a24;
+            color: #aaa;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+        .ai-bubble {
+            background: linear-gradient(90deg, #0a1f1a, #0d0d12);
+            color: #00ffcc;
+            align-self: flex-start;
+            border-left: 3px solid #00ffcc;
+        }
+        .ai-bubble .cursor {
+            display: inline-block;
+            width: 2px;
+            height: 16px;
+            background: #00ffcc;
+            vertical-align: text-bottom;
+            margin-left: 2px;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* 动画主画布 */
+        #animationCanvas {
+            background: #020205;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+            box-shadow: 0 0 30px rgba(0, 255, 204, 0.05);
+        }
+
+        /* 状态说明文字 */
+        #statusText {
+            margin-top: 15px;
+            font-size: 18px;
+            height: 25px;
+            color: #fff;
+            font-weight: bold;
+            text-align: center;
+        }
+        #explanationText {
+            font-size: 13px;
+            color: #777;
+            max-width: 820px;
+            text-align: center;
+            line-height: 1.5;
+            min-height: 40px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>GLM-5 40B参数 · 5层架构微观视角</h1>
+    <div class="subtitle">自回归循环：每一次生成一个字，信号都要横向穿透这5层车间</div>
+
+    <div class="chat-container">
+        <div class="chat-bubble user-bubble">你是什么模型？</div>
+        <div class="chat-bubble ai-bubble">我是<span id="currentOutput"></span><span class="cursor"></span></div>
+    </div>
+
+    <canvas id="animationCanvas" width="820" height="300"></canvas>
+
+    <div id="statusText">初始化流水线...</div>
+    <div id="explanationText">40B参数被平均分为5层（每层约8B），每一层负责不同深度的理解与计算</div>
+
+<script>
+    const canvas = document.getElementById('animationCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusText = document.getElementById('statusText');
+    const explanationText = document.getElementById('explanationText');
+    const currentOutput = document.getElementById('currentOutput');
+
+    // 动画状态
+    let signalX = -20; // 发光信号球的X坐标
+    const signalSpeed = 2.5;
+    let currentLayerIndex = -1;
+    let generatedWords = ["智", "谱", "清", "言", "。"];
+    let currentWordIndex = 0;
+    let isPaused = false;
+    let pauseTimer = 0;
+
+    // 定义5层参数车间
+    const layers = [
+        { label: "Layer 1", sub: "词法嵌入", desc: "把字变成数字向量，初步理解字面意思" },
+        { label: "Layer 2", sub: "注意力机制", desc: "看上下文，发现'你'是在问'我'" },
+        { label: "Layer 3", sub: "深层推理", desc: "触发自我认知模块，定位到'大模型'身份" },
+        { label: "Layer 4", sub: "前馈网络(FFN)", desc: "40亿个推子大狂欢，调整候选字概率" },
+        { label: "Layer 5", sub: "输出概率层", desc: "最终计票器：'智'字胜出，概率99%" }
+    ];
+
+    // 为每层初始化推子 (模拟参数矩阵)
+    layers.forEach((layer, i) => {
+        layer.x = 30 + i * 160;
+        layer.y = 30;
+        layer.width = 140;
+        layer.height = 240;
+        layer.faders = [];
+        
+        // 每层放10个推子代表该层包含的参数
+        for(let j=0; j < 10; j++) {
+            layer.faders.push({
+                offsetY: 20 + j * (220 / 10),
+                height: 0,
+                targetHeight: 0,
+                color: `hsl(${160 + i * 15}, 100%, ${50 + Math.random()*20}%)`
+            });
+        }
+    });
+
+    // 动画主循环
+    function animate() {
+        ctx.clearRect(0, 0, 820, 300);
+
+        // 1. 画静态的5个车间框
+        layers.forEach((layer, i) => {
+            ctx.strokeStyle = i === currentLayerIndex ? "#00ffcc" : "#1a1a1a";
+            ctx.lineWidth = i === currentLayerIndex ? 2 : 1;
+            ctx.strokeRect(layer.x, layer.y, layer.width, layer.height);
+            
+            // 标题
+            ctx.fillStyle = i === currentLayerIndex ? "#00ffcc" : "#444";
+            ctx.font = "bold 12px Arial";
+            ctx.fillText(layer.label, layer.x + 10, layer.y - 10);
+            ctx.fillStyle = i === currentLayerIndex ? "#aaa" : "#333";
+            ctx.font = "10px Arial";
+            ctx.fillText(layer.sub, layer.x + 70, layer.y - 10);
+        });
+
+        // 2. 画推子动态
+        layers.forEach((layer, i) => {
+            layer.faders.forEach(f => {
+                // 如果信号球在这一层，推子就疯狂动
+                if (i === currentLayerIndex && !isPaused) {
+                    if(Math.random() < 0.2) f.targetHeight = Math.random() * 40 + 10; // 疯狂改变目标高度
+                } else if (i < currentLayerIndex) {
+                    f.targetHeight = 5; // 过去的层渐渐平静
+                } else {
+                    f.targetHeight = 0; // 没到的层静止
+                }
+
+                // 平滑过渡
+                f.height += (f.targetHeight - f.height) * 0.3;
+
+                // 绘制推子条
+                ctx.fillStyle = f.color;
+                ctx.globalAlpha = f.height > 1 ? 0.8 : 0.1;
+                ctx.fillRect(layer.x + 10, f.offsetY, f.height, 3);
+                ctx.globalAlpha = 1;
+            });
+        });
+
+        // 3. 画发光信号球
+        if (!isPaused) {
+            signalX += signalSpeed;
+        } else {
+            pauseTimer++;
+            if (pauseTimer > 60) { // 暂停一秒后重置
+                resetCycle();
+            }
+        }
+
+        if (signalX > 0 && signalX < 820 && !isPaused) {
+            // 计算当前在哪一层
+            let tempIndex = Math.floor((signalX - 30) / 160);
+            if (tempIndex >= 0 && tempIndex < 5) {
+                currentLayerIndex = tempIndex;
+                statusText.innerText = `信号正在穿过：${layers[currentLayerIndex].label} (${layers[currentLayerIndex].sub})`;
+                explanationText.innerText = layers[currentLayerIndex].desc;
+            }
+            
+            // 绘制发光球
+            ctx.beginPath();
+            const gradient = ctx.createRadialGradient(signalX, 150, 0, signalX, 150, 20);
+            gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
+            gradient.addColorStop(0.3, "rgba(0, 255, 204, 0.8)");
+            gradient.addColorStop(1, "rgba(0, 255, 204, 0)");
+            ctx.fillStyle = gradient;
+            ctx.arc(signalX, 150, 20, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 球的核心
+            ctx.beginPath();
+            ctx.fillStyle = "#fff";
+            ctx.arc(signalX, 150, 4, 0, Math.PI * 2);
+            ctx.fill();
+        } 
+
+        // 穿过最后一层后触发暂停（输出结果）
+        if (signalX >= 820 && !isPaused) {
+            isPaused = true;
+            pauseTimer = 0;
+            currentLayerIndex = -1; // 取消高亮
+            statusText.innerText = "本轮循环结束！输出结果。";
+            explanationText.innerText = "将生成的字追加到历史记录中，即将开启下一次循环去猜下一个字。";
+            
+            // 追加文字
+            if (currentWordIndex < generatedWords.length) {
+                currentOutput.innerText += generatedWords[currentWordIndex];
+                currentWordIndex++;
+            } else {
+                currentOutput.innerText = "智谱清言。"; // 演示结束
+                explanationText.innerText = "动画演示完毕。实际模型中，这个过程每秒会进行几十到上百次。";
+            }
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    function resetCycle() {
+        if (currentWordIndex <= generatedWords.length) {
+            signalX = -20;
+            currentLayerIndex = -1;
+            isPaused = false;
+            pauseTimer = 0;
+        }
+    }
+
+    // 启动
+    requestAnimationFrame(animate);
+
+</script>
+</body>
+</html>
